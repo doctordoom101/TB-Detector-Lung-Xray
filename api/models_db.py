@@ -4,12 +4,11 @@ import datetime
 
 Base = declarative_base()
 
-class PredictionHistory(Base):
+class Prediction(Base):
     __tablename__ = "predictions"
     id = Column(Integer, primary_key=True, index=True)
-    patient_name = Column(String)
-    prediction = Column(String)
-    confidence = Column(Float)
-    image_path = Column(String)      # Path ke gambar asli
+    prediction_label = Column(String, nullable=False)
+    confidence_score = Column(Float, nullable=False)
+    image_path = Column(String, nullable=False)      # Path ke gambar asli
     vis_path = Column(String)        # Path ke hasil masking/Grad-CAM
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

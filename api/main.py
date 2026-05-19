@@ -85,3 +85,17 @@ async def get_all_history(db: Session = Depends(get_db)):
     """Mengambil seluruh riwayat data deteksi untuk halaman history"""
     records = db.query(models_db.Prediction).order_by(models_db.Prediction.created_at.desc()).all()
     return records
+
+# --- ENDPOINT BARU: GET BY ID ---
+@app.get("/history/{prediction_id}")
+async def get_history_by_id(prediction_id: int, db: Session = Depends(get_db)):
+    """Mengambil satu riwayat spesifik berdasarkan ID"""
+    record = db.query(models_db.Prediction).filter(models_db.Prediction.id == prediction_id).first()
+    
+    # Validasi jika ID tidak ditemukan di database
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Riwayat pemeriksaan dengan ID {prediction_id} tidak ditemukan."
+        )
+    return record

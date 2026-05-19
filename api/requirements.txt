@@ -1,1 +1,8 @@
 sqlalchemy
+tensorflow
+fastapi
+uvicorn
+opencv-python
+pillow
+numpy
+python-multipart

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Depends
+from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 import tensorflow as tf
@@ -99,3 +99,36 @@ async def get_history_by_id(prediction_id: int, db: Session = Depends(get_db)):
             detail=f"Riwayat pemeriksaan dengan ID {prediction_id} tidak ditemukan."
         )
     return record
+
+# --- ENDPOINT BARU: DELETE BY ID ---
+@app.delete("/history/{prediction_id}")
+async def delete_history_by_id(prediction_id: int, db: Session = Depends(get_db)):
+    """Menghapus data riwayat di DB sekaligus menghapus file gambar fisiknya di storage"""
+    record = db.query(models_db.Prediction).filter(models_db.Prediction.id == prediction_id).first()
+    
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Gagal menghapus. Riwayat dengan ID {prediction_id} tidak ditemukan."
+        )
+    
+    # Ambil path gambar sebelum datanya dihapus dari DB
+    orig_path = record.image_path
+    vis_path = record.vis_path
+
+    # 1. Hapus record dari database
+    db.delete(record)
+    db.commit()
+
+    # 2. Hapus file fisik gambar asli jika ada di local storage
+    if orig_path and os.path.exists(orig_path):
+        os.remove(orig_path)
+        
+    # 3. Hapus file fisik gambar masking Grad-CAM jika ada di local storage
+    if vis_path and os.path.exists(vis_path):
+        os.remove(vis_path)
+
+    return {
+        "status": "success",
+        "message": f"Riwayat dengan ID {prediction_id} dan file gambar terkait berhasil dihapus dari sistem."
+    }

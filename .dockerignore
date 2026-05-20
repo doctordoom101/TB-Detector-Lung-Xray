@@ -1,0 +1,10 @@
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.git
+.gitignore
+api/database.db
+api/uploads/*
+research/
+.ipynb_checkpoints/

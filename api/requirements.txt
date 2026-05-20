@@ -2,7 +2,7 @@ sqlalchemy
 tensorflow
 fastapi
 uvicorn
-opencv-python
+opencv-python-headless
 pillow
 numpy
 python-multipart

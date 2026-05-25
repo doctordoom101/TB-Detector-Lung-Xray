@@ -1,0 +1,15 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tb-detection-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api/database.db:/app/api/database.db
+      - ./api/uploads:/app/api/uploads
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped

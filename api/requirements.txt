@@ -1,8 +1,0 @@
-sqlalchemy
-tensorflow
-fastapi
-uvicorn
-opencv-python-headless
-pillow
-numpy
-python-multipart

@@ -1,44 +1,59 @@
 # ==========================================
-# Stage 1: Build & Install Dependencies
+# Stage 1: Builder
 # ==========================================
 FROM python:3.10-slim AS builder
 
 WORKDIR /app
 
-# Install tools yang dibutuhkan untuk kompilasi beberapa library wheel
+# Install system dependencies needed for building/installing certain python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements dan install ke folder lokal .local
+# Upgrade pip and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir --user -r requirements.txt
 
 # ==========================================
-# Stage 2: Final Runtime Environment (Lightweight)
+# Stage 2: Runtime
 # ==========================================
 FROM python:3.10-slim AS runner
 
 WORKDIR /app
 
-# Salin library yang sudah di-install dari stage builder
+# Install runtime system dependencies
+# libglib2.0-0 is required by opencv-python-headless
+# libgl1-mesa-glx might be needed for some cv2 operations (optional for headless but safe)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    libgl1-mesa-glx \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed python packages from builder
 COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
-# Salin folder model dan kode API ke dalam container
+# Environment variables to optimize TensorFlow and Python
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TF_ENABLE_ONEDNN_OPTS=0 \
+    CUDA_VISIBLE_DEVICES=-1
+
+# Copy models first (better for caching if code changes more often than models)
 COPY model/ /app/model/
+
+# Copy API code
 COPY api/ /app/api/
 
-# Buat folder uploads untuk menampung gambar rontgen pasien
+# Ensure the uploads directory exists within the API folder
 RUN mkdir -p /app/api/uploads
 
-# Set environment variable agar Python tidak menulis file .pyc
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# Set working directory to the api folder for execution
+WORKDIR /app/api
 
-# Ekspos port 8000 (port default FastAPI)
+# Expose FastAPI port
 EXPOSE 8000
 
-# Jalankan server Uvicorn mengarah ke folder api/main.py
-WORKDIR /app/api
+# Run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

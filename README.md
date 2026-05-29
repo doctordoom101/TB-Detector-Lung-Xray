@@ -1,35 +1,32 @@
-# Tuberculosis Detection from Chest X-Ray 
+# Tuberculosis Detection & Lung Segmentation from Chest X-Ray
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange.svg)](https://tensorflow.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-
-dataset : https://www.kaggle.com/datasets/tawsifurrahman/tuberculosis-tb-chest-xray-dataset
+[![Gradio](https://img.shields.io/badge/Gradio-App-orange.svg)](https://gradio.app/)
 
 ## Project Overview
-Dataset terdiri dari citra X-ray yang terbagi menjadi dua kelas: **Normal** dan **Tuberculosis**. Projek ini memiliki tantangan utama pada ketidakseimbangan data (*imbalanced dataset*), di mana kelas Normal jauh lebih banyak dibanding kelas TB.
+Proyek ini mengintegrasikan dua model *deep learning* untuk analisis citra medis paru-paru:
+1.  **TB Classification:** Mendeteksi kehadiran Tuberculosis menggunakan arsitektur **MobileNetV2**.
+2.  **Lung Segmentation:** Mengisolasi area paru-paru dari citra X-ray menggunakan arsitektur **U-Net**.
+
+Tantangan utama pada klasifikasi adalah ketidakseimbangan data (*imbalanced dataset*), yang ditangani menggunakan teknik *Class Weights*. Sedangkan untuk segmentasi, model dilatih untuk mengenali batas anatomi paru-paru secara presisi.
 
 ### Key Features:
-- **Preprocessing:** Resizing (224x224), Rescaling, dan Augmentasi Citra.
-- **Model Architecture:** Transfer Learning menggunakan **MobileNetV2** (Pre-trained on ImageNet).
-- **Optimization:** Implementasi *Class Weights* untuk menangani data imbalanced.
+- **Dual Inference Flow:** Analisis klasifikasi dan segmentasi dilakukan dalam satu pipeline.
+- **TB Classifier:** Akurasi tinggi (>99%) dengan MobileNetV2.
+- **Lung Segmentor:** Visualisasi area paru-paru menggunakan U-Net untuk membantu lokalisasi diagnostik.
 
-## Dataset Distribution
-
-![Alt text](img/dataset_distribution.jpeg)
-
-Distribusi data sebelum dilakukan splitting:
-* **Normal:** ±3500 gambar
-* **Tuberculosis:** ±700 gambar
-
-*Note: Digunakan teknik Stratified Splitting untuk menjaga proporsi kelas pada Train (80%), Val (10%), dan Test (10%).*
+---
 
 ## Tech Stack
 - **Language:** Python
-- **Libraries:** TensorFlow/Keras, Scikit-Learn, Matplotlib, Seaborn, Split-folders.
-  
-## Model Performance
-Hasil evaluasi pada **Test Set** menunjukkan performa yang sangat solid:
+- **Libraries:** TensorFlow/Keras, Gradio, OpenCV, NumPy, Pillow.
+- **Models:** MobileNetV2 (Classification), U-Net (Segmentation).
+
+---
+
+## Model Performance (Classification)
+Hasil evaluasi pada **Test Set** (MobileNetV2):
 
 | Class | Precision | Recall | F1-Score | Support |
 | :--- | :--- | :--- | :--- | :--- |
@@ -37,19 +34,29 @@ Hasil evaluasi pada **Test Set** menunjukkan performa yang sangat solid:
 | **TB** | 1.00 | 0.96 | 0.98 | 70 |
 | **Accuracy** | | | **99.29%** | 420 |
 
-### Training Logs
+---
+
+## Detection Result with Lung Segmentation Visualization
 
 <div style="display: flex; gap: 10px;">
-  <img src="img/training_log(1).jpeg" width="45%">
-  <img src="img/training_log(2).jpeg" width="45%">
+  <img src="img/seg_result_normal(1).jpeg" width="45%" alt="Segmentation Overlay Example">
+  <img src="img/seg_result_tb(1).jpeg" width="45%" alt="Binary Mask Example">
 </div>
 
-- **Loss:** Tidak menunjukkan indikasi overfitting; kurva Train dan Val menurun secara konvergen.
-- **Accuracy:** Stabil di angka >99% pada akhir epoch.
+*Catatan: Gambar di atas menunjukkan bagaimana model U-Net mengisolasi area paru-paru (Overlay Hijau) untuk memfokuskan analisis pada area yang relevan.*
 
-### Detection Result with Grad-CAM Diagnostic Visualization
-<div style="display: flex; gap: 10px;">
-  <img src="img/result(1).png" width="45%">
-  <img src="img/result(2).png" width="45%">
-</div>
+---
 
+## How to Run
+Untuk menjalankan aplikasi testing secara lokal:
+
+    pip install -r tests/requirements.txt
+    python tests/test_app.py
+
+Buka URL lokal yang muncul di terminal (biasanya `http://127.0.0.1:7860`).
+
+---
+
+## Dataset Reference
+- [Tuberculosis (TB) Chest X-ray Database](https://www.kaggle.com/datasets/tawsifurrahman/tuberculosis-tb-chest-xray-dataset)
+- [Chest X-Ray Lungs Segmentation](https://www.kaggle.com/datasets/iamtapendu/chest-x-ray-lungs-segmentation)

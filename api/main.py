@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import tensorflow as tf
 import uuid
@@ -11,6 +12,13 @@ import utils
 from database import SessionLocal
 
 app = FastAPI(title="Tuberculosis Detection API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Atau tentukan domain Flutter Anda, misal: ["http://localhost:5000"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Pastikan folder uploads tersedia untuk menyimpan gambar
 UPLOAD_DIR = "./uploads"

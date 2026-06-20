@@ -1,20 +1,26 @@
 from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
 import tensorflow as tf
 import uuid
 import os
+import json
+from fastapi.responses import StreamingResponse
 
 # Import komponen lokal kamu
 import models_db
 import utils
+import auth_utils
+import firebase_config 
 from database import SessionLocal
 
-app = FastAPI(title="Tuberculosis Detection API")
+app = FastAPI(title="Tuberculosis Detection API with Local Auth & FCM")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Atau tentukan domain Flutter Anda, misal: ["http://localhost:5000"]
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,11 +49,96 @@ def get_db():
     finally:
         db.close()
 
-import json
-from fastapi.responses import StreamingResponse
+# Pydantic Schemas untuk Registrasi & Login
+class UserRegister(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str = None
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+# Keamanan Bearer Token JWT
+security = HTTPBearer()
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Dependency injection untuk mengecek validitas token JWT user lokal"""
+    token = credentials.credentials
+    payload = auth_utils.decode_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token tidak valid atau telah kedaluwarsa.",
+        )
+    email = payload.get("sub")
+    user = db.query(models_db.User).filter(models_db.User.email == email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User tidak ditemukan.",
+        )
+    return user
+
+
+# --- AUTH ENDPOINTS ---
+
+@app.post("/auth/register")
+async def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
+    """Endpoint untuk mendaftarkan akun baru secara lokal"""
+    # Cek apakah email sudah terdaftar
+    existing_user = db.query(models_db.User).filter(models_db.User.email == user_data.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email ini sudah terdaftar."
+        )
+    
+    # Hash password dan simpan ke database
+    hashed_password = auth_utils.get_password_hash(user_data.password)
+    new_user = models_db.User(
+        email=user_data.email,
+        hashed_password=hashed_password,
+        full_name=user_data.full_name
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {"status": "success", "message": "Registrasi akun berhasil!"}
+
+@app.post("/auth/login")
+async def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
+    """Endpoint Login untuk mendapatkan Access Token JWT"""
+    user = db.query(models_db.User).filter(models_db.User.email == login_data.email).first()
+    if not user or not auth_utils.verify_password(login_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email atau password salah."
+        )
+    
+    # Generate Token JWT
+    access_token = auth_utils.create_access_token(data={"sub": user.email})
+    return {
+        "status": "success",
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "email": user.email,
+            "full_name": user.full_name
+        }
+    }
+
+
+# --- PREDICTION & HISTORY ENDPOINTS ---
 
 @app.post("/predict")
-async def predict_xray(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def predict_xray(
+    file: UploadFile = File(...), 
+    fcm_token: str = None, 
+    db: Session = Depends(get_db),
+    current_user: models_db.User = Depends(get_current_user)
+):
+    """Endpoint Prediksi yang diproteksi JWT Token"""
     # 1. Generate nama file unik menggunakan UUID agar tidak bentrok
     file_id = str(uuid.uuid4())
     file_ext = file.filename.split(".")[-1]
@@ -58,7 +149,7 @@ async def predict_xray(file: UploadFile = File(...), db: Session = Depends(get_d
     orig_path = os.path.join(UPLOAD_DIR, orig_filename)
     vis_path = os.path.join(UPLOAD_DIR, vis_filename)
 
-    # 2. Simpan gambar asli dari user
+    # 2. Simpan gambar asli dari user ke server lokal
     with open(orig_path, "wb") as buffer:
         buffer.write(await file.read())
 
@@ -71,12 +162,13 @@ async def predict_xray(file: UploadFile = File(...), db: Session = Depends(get_d
         label = "Tuberculosis" if confidence > 0.5 else "Normal"
         display_confidence = confidence if label == "Tuberculosis" else (1.0 - confidence)
 
-        # 4. Simpan catatan AWAL ke SQLite Database (vis_path kosong dulu)
+        # 4. Simpan catatan AWAL ke SQLite Database (terikat dengan ID user yang login)
         db_record = models_db.Prediction(
             prediction_label=label,
             confidence_score=display_confidence,
             image_path=orig_path,
-            vis_path=None
+            vis_path=None,
+            user_id=current_user.id
         )
         db.add(db_record)
         db.commit()
@@ -88,7 +180,7 @@ async def predict_xray(file: UploadFile = File(...), db: Session = Depends(get_d
             "prediction": label,
             "confidence": f"{display_confidence * 100:.2f}%",
             "original_image_url": f"/static/{orig_filename}",
-            "segmentation_image_url": None, # Signal loading
+            "segmentation_image_url": None, 
             "created_at": db_record.created_at.isoformat() if db_record.created_at else None
         }
         yield json.dumps(first_output) + "\n"
@@ -106,57 +198,75 @@ async def predict_xray(file: UploadFile = File(...), db: Session = Depends(get_d
         final_output["segmentation_image_url"] = f"/static/{vis_filename}"
         yield json.dumps(final_output) + "\n"
 
+        # 9. KIRIM PUSH NOTIFICATION VIA FCM jika token disediakan dari Flutter
+        if fcm_token:
+            firebase_config.send_fcm_notification(
+                token=fcm_token,
+                title="Hasil Deteksi Tuberkulosis Selesai",
+                body=f"Halo {current_user.full_name or 'User'}, pemeriksaan menunjukkan status: {label} dengan akurasi {display_confidence * 100:.2f}%."
+            )
+
     return StreamingResponse(generate_steps(), media_type="application/x-ndjson")
 
 @app.get("/history")
-async def get_all_history(db: Session = Depends(get_db)):
-    """Mengambil seluruh riwayat data deteksi untuk halaman history"""
-    records = db.query(models_db.Prediction).order_by(models_db.Prediction.created_at.desc()).all()
+async def get_user_history(
+    db: Session = Depends(get_db),
+    current_user: models_db.User = Depends(get_current_user)
+):
+    """Mengambil riwayat data deteksi spesifik milik user yang sedang login saja"""
+    records = db.query(models_db.Prediction)\
+        .filter(models_db.Prediction.user_id == current_user.id)\
+        .order_by(models_db.Prediction.created_at.desc())\
+        .all()
     return records
 
-# --- ENDPOINT BARU: GET BY ID ---
 @app.get("/history/{prediction_id}")
-async def get_history_by_id(prediction_id: int, db: Session = Depends(get_db)):
-    """Mengambil satu riwayat spesifik berdasarkan ID"""
-    record = db.query(models_db.Prediction).filter(models_db.Prediction.id == prediction_id).first()
+async def get_history_by_id(
+    prediction_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models_db.User = Depends(get_current_user)
+):
+    """Mengambil satu riwayat spesifik berdasarkan ID (Hanya jika milik user terkait)"""
+    record = db.query(models_db.Prediction)\
+        .filter(models_db.Prediction.id == prediction_id, models_db.Prediction.user_id == current_user.id)\
+        .first()
     
-    # Validasi jika ID tidak ditemukan di database
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail=f"Riwayat pemeriksaan dengan ID {prediction_id} tidak ditemukan."
+            detail=f"Riwayat pemeriksaan tidak ditemukan atau Anda tidak memiliki hak akses."
         )
     return record
 
-# --- ENDPOINT BARU: DELETE BY ID ---
 @app.delete("/history/{prediction_id}")
-async def delete_history_by_id(prediction_id: int, db: Session = Depends(get_db)):
-    """Menghapus data riwayat di DB sekaligus menghapus file gambar fisiknya di storage"""
-    record = db.query(models_db.Prediction).filter(models_db.Prediction.id == prediction_id).first()
+async def delete_history_by_id(
+    prediction_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models_db.User = Depends(get_current_user)
+):
+    """Menghapus data riwayat milik user terkait di DB sekaligus file gambarnya"""
+    record = db.query(models_db.Prediction)\
+        .filter(models_db.Prediction.id == prediction_id, models_db.Prediction.user_id == current_user.id)\
+        .first()
     
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail=f"Gagal menghapus. Riwayat dengan ID {prediction_id} tidak ditemukan."
+            detail=f"Gagal menghapus. Riwayat tidak ditemukan atau Anda tidak memiliki akses."
         )
     
-    # Ambil path gambar sebelum datanya dihapus dari DB
     orig_path = record.image_path
     vis_path = record.vis_path
 
-    # 1. Hapus record dari database
     db.delete(record)
     db.commit()
 
-    # 2. Hapus file fisik gambar asli jika ada di local storage
     if orig_path and os.path.exists(orig_path):
         os.remove(orig_path)
-        
-    # 3. Hapus file fisik gambar masking Grad-CAM jika ada di local storage
     if vis_path and os.path.exists(vis_path):
         os.remove(vis_path)
 
     return {
         "status": "success",
-        "message": f"Riwayat dengan ID {prediction_id} dan file gambar terkait berhasil dihapus dari sistem."
+        "message": f"Riwayat dengan ID {prediction_id} berhasil dihapus dari sistem lokal."
     }

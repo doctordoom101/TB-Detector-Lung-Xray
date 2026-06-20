@@ -6,3 +6,7 @@ opencv-python-headless
 pillow
 numpy
 python-multipart
+firebase-admin
+pyjwt
+passlib[bcrypt]
+email-validator

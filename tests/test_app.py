@@ -37,6 +37,15 @@ def combined_predict(input_img, progress=gr.Progress()):
     tb_prob = float(cls_preds[0][0])
     normal_prob = 1.0 - tb_prob
     
+    # Confidence Score Result
+    confidence_results = {
+        "Normal": normal_prob,
+        "Tuberculosis": tb_prob
+    }
+
+    # YIELD 1: Hasil Klasifikasi Dulu
+    yield confidence_results, None, None
+
     # --- STEP 2: LUNG SEGMENTATION ---
     progress(0.5, desc="Loading for Lung Segmentation...")
     # Preprocessing for Segmentation (U-Net expects 512x512 Grayscale)
@@ -66,13 +75,8 @@ def combined_predict(input_img, progress=gr.Progress()):
     
     progress(1.0, desc="Finalizing Results")
     
-    # Confidence Score Result
-    confidence_results = {
-        "Normal": normal_prob,
-        "Tuberculosis": tb_prob
-    }
-    
-    return confidence_results, binary_mask, overlay
+    # YIELD 2: Hasil Lengkap
+    yield confidence_results, binary_mask, overlay
 
 # 2. Gradio Interface
 with gr.Blocks(title="TB Detection & Lung Segmentation") as demo:

@@ -1,0 +1,7 @@
+/venv
+__pycache__
+uploads/
+serviceAccountKey.json
+*.db
+*.db.bak
+api/firebase_config.py

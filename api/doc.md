@@ -71,6 +71,37 @@ Melakukan login menggunakan email dan password untuk mendapatkan Access Token JW
     }
     ```
 
+### C. Login dengan Akun Google (Firebase)
+Melakukan otentikasi menggunakan Google ID Token (yang diperoleh dari SDK Google Sign-in pada aplikasi mobile). Backend akan memverifikasi token tersebut menggunakan Firebase Admin SDK, lalu membuat/mengambil data user dan menerbitkan Access Token JWT lokal.
+
+*   **URL:** `/auth/google`
+*   **Method:** `POST`
+*   **Content-Type:** `application/json`
+*   **Payload (JSON Body):**
+    ```json
+    {
+      "id_token": "<your_firebase_google_id_token>"
+    }
+    ```
+*   **Respon Sukses (200 OK):**
+    ```json
+    {
+      "status": "success",
+      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "token_type": "bearer",
+      "user": {
+        "email": "user.google@example.com",
+        "full_name": "Nama Google User"
+      }
+    }
+    ```
+*   **Respon Gagal (401 Unauthorized):**
+    ```json
+    {
+      "detail": "Token Google tidak valid atau kedaluwarsa: [detail_error]"
+    }
+    ```
+
 ---
 
 ## 2. Fitur Utama (Prediksi & Riwayat)

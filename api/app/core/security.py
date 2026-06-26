@@ -2,11 +2,7 @@ import jwt
 import datetime
 import hashlib
 import bcrypt
-
-# Konfigurasi JWT Secret (Bisa Anda ganti sesuka hati)
-SECRET_KEY = "SUPER_SECRET_KEY_UNTUK_TBC_DETECTION_APP_PROJECT"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440 # Token bertahan 24 Jam
+from app.core.config import settings
 
 def _prepare_password(password: str) -> bytes:
     """
@@ -36,15 +32,15 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict):
     """Membuat JWT Access Token"""
     to_encode = data.copy()
-    expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
 def decode_access_token(token: str):
     """Membaca dan memverifikasi JWT Token"""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
     except jwt.PyJWTError:
         return None

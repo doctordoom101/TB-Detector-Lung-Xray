@@ -19,7 +19,14 @@ router = APIRouter(tags=["Predictions"])
 # Load models
 print("Loading Models for Prediction...")
 model_cls = tf.keras.models.load_model(settings.MODEL_CLS_PATH)
-model_seg = tf.keras.models.load_model(settings.MODEL_SEG_PATH, compile=False)
+
+if settings.MODEL_SEG_PATH.endswith(".tflite"):
+    print(f"Loading U-Net Segmentation (TFLite) from {settings.MODEL_SEG_PATH}...")
+    model_seg = tf.lite.Interpreter(model_path=settings.MODEL_SEG_PATH)
+    model_seg.allocate_tensors()
+else:
+    print(f"Loading U-Net Segmentation (Keras) from {settings.MODEL_SEG_PATH}...")
+    model_seg = tf.keras.models.load_model(settings.MODEL_SEG_PATH, compile=False)
 
 @router.post("/predict")
 async def predict_xray(

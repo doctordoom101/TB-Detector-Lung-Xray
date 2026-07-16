@@ -15,6 +15,6 @@ class Settings:
     # Paths
     UPLOAD_DIR: str = "./uploads"
     MODEL_CLS_PATH: str = "../model/mobilenetv2/best_mobilenetv2_model.keras"
-    MODEL_SEG_PATH: str = "../model/unet/best_unet.keras"
+    MODEL_SEG_PATH: str = "../model/unet/best_unet.tflite"
 
 settings = Settings()

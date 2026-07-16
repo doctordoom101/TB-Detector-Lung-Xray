@@ -31,7 +31,15 @@ def save_segmentation_overlay(seg_model, seg_input: np.ndarray, original_img_pat
     """Menjalankan segmentasi dan menyimpan hasil overlay (original + green mask)"""
     try:
         # 1. Prediksi Masker
-        preds = seg_model.predict(seg_input, verbose=0)
+        if isinstance(seg_model, tf.lite.Interpreter):
+            input_details = seg_model.get_input_details()
+            output_details = seg_model.get_output_details()
+            seg_model.set_tensor(input_details[0]['index'], seg_input)
+            seg_model.invoke()
+            preds = seg_model.get_tensor(output_details[0]['index'])
+        else:
+            preds = seg_model.predict(seg_input, verbose=0)
+            
         mask = np.squeeze(preds)
         binary_mask = (mask > 0.5).astype(np.uint8) * 255
 
